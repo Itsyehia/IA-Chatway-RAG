@@ -39,6 +39,13 @@ text_splitter = RecursiveCharacterTextSplitter(
 
 chunks = text_splitter.split_documents(documents)
 chunk_texts = [chunk.page_content for chunk in chunks]
+chunk_records = [
+    {
+        "text": chunk.page_content,
+        "page": chunk.metadata.get("page")
+    }
+    for chunk in chunks
+]
 
 # to support multiple languages ( french in this case )
 model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
@@ -50,7 +57,7 @@ index.add(embeddings)
 faiss.write_index(index, INDEX_PATH)
 
 with open(CHUNKS_PATH, "wb") as f:
-    pickle.dump(chunk_texts, f)
+    pickle.dump(chunk_records, f)
 
 print(f"Saved FAISS index to: {INDEX_PATH}")
 print(f"Saved chunks to: {CHUNKS_PATH}")

@@ -34,6 +34,23 @@ STOPWORDS = {
 }
 
 
+def get_chunk_text(chunk):
+    return chunk["text"] if isinstance(chunk, dict) else chunk
+
+
+def get_chunk_page(chunk):
+    return chunk.get("page") if isinstance(chunk, dict) else None
+
+
+def extract_page_labels(retrieved_text):
+    seen = []
+    for page in re.findall(r"\[Page (\d+)\]", retrieved_text):
+        label = f"[Page {page}]"
+        if label not in seen:
+            seen.append(label)
+    return seen
+
+
 def normalize_text(text):
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower()
 
@@ -47,7 +64,7 @@ def keyword_chunk_indices(question, top_k=3):
 
     scored_chunks = []
     for idx, chunk in enumerate(stored_chunks):
-        normalized_chunk = normalize_text(chunk)
+        normalized_chunk = normalize_text(get_chunk_text(chunk))
         score = sum(1 for word in keywords if word in normalized_chunk)
         if score > 0:
             scored_chunks.append((score, idx))
@@ -74,7 +91,14 @@ def retrieve_chunks(question, top_k=9, distance_threshold=120.0):
         if next_idx < len(stored_chunks) and next_idx not in selected_indices:
             selected_indices.append(next_idx)
 
-    return "\n\n".join(f"[Chunk {idx}]\n{stored_chunks[idx]}" for idx in selected_indices)
+    formatted_chunks = []
+    for idx in selected_indices:
+        chunk = stored_chunks[idx]
+        page = get_chunk_page(chunk)
+        page_label = f"Page {page}" if page is not None else f"Chunk {idx}"
+        formatted_chunks.append(f"[{page_label}]\n{get_chunk_text(chunk)}")
+
+    return "\n\n".join(formatted_chunks)
 
 # Load API key from .env file
 load_dotenv()
@@ -91,17 +115,20 @@ def generate_answer(question, retrieved_text):
         yield "This information is not available in the document."
         return
 
+    available_pages = extract_page_labels(retrieved_text)
     system_prompt = (
     "You are a strict data extraction assistant. "
     "Answer the question using ONLY the facts explicitly stated in the provided retrieved chunks. "
-    "Include citations pointing to the information in the text. "
+    "Every answer must include source citations using the exact page format [Page X]. "
     "CRITICAL RULES: "
     "1. NO DEDUCTION: Do not use your pre-trained world knowledge to deduce or infer answers. If the text mentions a word (like 'Paris') but does not explicitly answer the user's question about it, you cannot draw conclusions. "
     "2. FALLBACK: If the answer cannot be found or assembled only from explicit facts written in the chunks, you MUST output EXACTLY and ONLY this phrase: "
     "\"Cette information n'est pas disponible dans le document.\" "
     "3. NO CHAT: Do not explain your reasoning. Do not write things like 'Puisque le document ne contient pas...' or 'La réponse est'. Just output the facts or the fallback phrase. "
     "If you provide an answer, never append the fallback phrase after it. "
-    "4. Output the final answer in French."
+    "4. Output the final answer in French. "
+    "5. Do not use chunk numbers or invent citations. Only cite the page labels provided in the retrieved chunks. "
+    "6. If you provide an answer, at least one [Page X] citation is mandatory."
 )
 
     user_prompt = f"Retrieved chunks:\n{retrieved_text}\n\nQuestion: {question}"
@@ -125,8 +152,21 @@ def generate_answer(question, retrieved_text):
         stop=None
     )
 
+    answer_parts = []
     for chunk in completion:
-        yield chunk.choices[0].delta.content or ""
+        answer_parts.append(chunk.choices[0].delta.content or "")
+
+    answer = "".join(answer_parts).strip()
+
+    if (
+        answer
+        and answer != "Cette information n'est pas disponible dans le document."
+        and not re.search(r"\[Page \d+\]", answer)
+        and available_pages
+    ):
+        answer = f"{answer} {' '.join(available_pages)}"
+
+    yield answer
 
 
 question = st.text_input("Question")

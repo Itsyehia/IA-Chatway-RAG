@@ -1,5 +1,7 @@
 # IA-Chatway-RAG
 
+Clone: gh repo clone Itsyehia/IA-Chatway-RAG
+
 This project is a simple Retrieval-Augmented Generation (RAG) application built around a local PDF processing pipeline and a minimal Streamlit frontend.
 
 The workflow is:

@@ -1,0 +1,30 @@
+# Environment variables
+
+.env
+.env.*
+
+# Optional: keep an example file
+
+!.env.example
+
+# Node (if you're using Node.js)
+
+node_modules/
+
+# Logs
+
+logs/
+*.log
+
+# OS files
+
+.DS_Store
+Thumbs.db
+
+# Build / dist
+
+
+dist/
+build/
+".env" 
+".env" 

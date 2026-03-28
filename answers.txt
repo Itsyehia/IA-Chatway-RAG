@@ -1,0 +1,34 @@
+Q1 — Recherche factuelle
+Quelle est l’autonomie maximale d’un camion électrique de 16 tonnes en 2022 dans le cas d’étude ?
+L'autonomie maximale d'un camion électrique de 16 tonnes en 2022 dans le cas d'étude est de 175 km [Page 15].
+
+Q2 — Extraction depuis un tableau
+ Quel est le coût de maintenance par kilomètre d’un camion électrique par rapport à un camion diesel, selon le modèle TCO présenté dans l’étude ?
+Le coût de maintenance par kilomètre d’un camion électrique est environ 30% moins élevé que pour un camion diesel, soit 10,5 c€/km contre 15 c€/km. [Page 40]
+
+Q3 — Croisement de sections
+« En combinant le dispositif de suramortissement et le bonus écologique, quel est l’écart de TCO entre un camion électrique et un camion diesel ? »
+L'écart de TCO entre un camion électrique et un camion diesel est de -35 000 €, soit -4 400 € par an. [Page 5]
+
+Q4 — Question hors périmètre
+« Quel est l’impact du camion électrique sur le transport longue distance, au-delà de 500 km ? »
+Cette information n'est pas disponible dans le document.
+
+Q5 — Synthèse
+« Quels sont les trois principaux freins au déploiement du camion électrique identifiés dans l’étude, et quelles solutions sont recommandées pour chacun d’entre eux ? »
+Les trois principaux freins au déploiement du camion électrique identifiés dans l'étude sont :
+
+Les contraintes d'exploitation liées principalement à l'autonomie limitée du camion électrique à ce jour.
+Le surcoût TCO du camion électrique lié à un coût d'acquisition plus élevé (en diminution).
+Le manque de retours d'expérience.
+Les solutions recommandées pour chacun d'entre eux sont :
+
+Les contraintes d'exploitation liées principalement à l'autonomie limitée du camion électrique à ce jour :
+Les contraintes d'exploitation peuvent être levées dans les prochaines années.
+Les transporteurs peuvent investir dans une borne de recharge rapide pour avoir recours à une charge rapide à mi-journée sur leur site au dépôt.
+Le surcoût TCO du camion électrique lié à un coût d'acquisition plus élevé (en diminution) :
+Avec aides financières, gain TCO du camion électrique sur les tournées électrifiables à ce jour.
+Sans aides financières, surcoût TCO du camion électrique lié à un coût d'acquisition plus élevé (en diminution).
+Le manque de retours d'expérience :
+Faire des essais sur des cas opérationnels avec des camions électriques afin de prendre conscience des avantages de cette technologie et de mieux cerner ses spécificités d'exploitation différentes du camion diesel.
+[Page 3], [Page 38], [Page 19], [Page 20], [Page 10], [Page 4], [Page 4], [Page 5], [Page 5].

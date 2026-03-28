@@ -7,10 +7,10 @@ import faiss
 import os
 from dotenv import load_dotenv
 from groq import Groq
+import streamlit as st
 
 from langchain_core.documents import Document
 
-# pip install langchain-core langchain-text-splitters
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(BASE_DIR, "embeddings.index")
@@ -56,7 +56,7 @@ def keyword_chunk_indices(question, top_k=3):
     return [idx for _, idx in scored_chunks[:top_k]]
 
 
-def retrieve_chunks(question, top_k=5, distance_threshold=120.0):
+def retrieve_chunks(question, top_k=9, distance_threshold=120.0):
     question_embedding = model.encode([question], convert_to_numpy=True, normalize_embeddings=True).astype("float32")
     distances, indices = index.search(question_embedding, top_k)
 
@@ -88,16 +88,9 @@ client = Groq(api_key=api_key)
 
 def generate_answer(question, retrieved_text):
     if not retrieved_text:
-        print("This information is not available in the document.")
+        yield "This information is not available in the document."
         return
 
-    # system_prompt = (
-    #     "Answer the question using ONLY the provided retrieved chunks. "
-    #     "Include citations pointing to the information in the text. "
-    #     'If the retrieved chunks do not contain the answer, or if the retrieval confidence is too low, output exactly: "This information is not available in the document." '
-    #     "Do not guess."
-    #     "Output the answer in French without any conversational filters."
-    # )
     system_prompt = (
     "You are a strict data extraction assistant. "
     "Answer the question using ONLY the facts explicitly stated in the provided retrieved chunks. "
@@ -125,7 +118,7 @@ def generate_answer(question, retrieved_text):
                 "content": user_prompt
             }
         ],
-        temperature=1,
+        temperature=0.5,
         max_completion_tokens=1024,
         top_p=1,
         stream=True,
@@ -133,23 +126,11 @@ def generate_answer(question, retrieved_text):
     )
 
     for chunk in completion:
-        print(chunk.choices[0].delta.content or "", end="")
-
-    print()
+        yield chunk.choices[0].delta.content or ""
 
 
-questions = [
-    # "Quelle est l’autonomie maximale d’un camion électrique de 16 tonnes en 2022 dans le cas d’étude ?",
-    # "Quel est le coût de maintenance par kilomètre d’un camion électrique par rapport à un camion diesel, selon le modèle TCO présenté dans l’étude ?",
-    # "En combinant le dispositif de suramortissement et le bonus écologique, quel est l’écart de TCO entre un camion électrique et un camion diesel ?",
-    # "Quel est l’impact du camion électrique sur le transport longue distance, au-delà de 500 km ?",
-    # "Quels sont les trois principaux freins au déploiement du camion électrique identifiés dans l’étude, et quelles solutions sont recommandées pour chacun d’entre eux ?",
+question = st.text_input("Question")
 
-    "quelle est la capitale de la France ?",
-]
-
-
-for i, question in enumerate(questions, start=1):
-    print(f"\nQ{i}: {question}")
+if st.button("Submit") and question:
     context = retrieve_chunks(question, top_k=5)
-    generate_answer(question, context)
+    st.write_stream(generate_answer(question, context))

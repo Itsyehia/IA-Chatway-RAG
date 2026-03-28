@@ -3,11 +3,9 @@
 .env
 .env.*
 
-# Optional: keep an example file
 
-!.env.example
 
-# Node (if you're using Node.js)
+# Node
 
 node_modules/
 

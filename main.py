@@ -1,10 +1,6 @@
-# !pip install langchain langchain-openai chroma db
-from langchain_community.document_loaders import TextLoader
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_text_splitters import CharacterTextSplitter
-from langchain_community.vectorstores import Chroma
-from langchain_classic.chains import RetrievalQA
+import pickle
 import re
+import unicodedata
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 import faiss
@@ -16,87 +12,69 @@ from langchain_core.documents import Document
 
 # pip install langchain-core langchain-text-splitters
 
-import re
-from langchain_core.documents import Document
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INDEX_PATH = os.path.join(BASE_DIR, "embeddings.index")
+CHUNKS_PATH = os.path.join(BASE_DIR, "stored_chunks.pkl")
+
+if not os.path.exists(INDEX_PATH) or not os.path.exists(CHUNKS_PATH):
+    raise FileNotFoundError(
+        "Saved embeddings not found. Run build_embeddings.py first."
+    )
+
+model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+index = faiss.read_index(INDEX_PATH)
+
+with open(CHUNKS_PATH, "rb") as f:
+    stored_chunks = pickle.load(f)
+
+STOPWORDS = {
+    "quel", "quelle", "quels", "quelles", "dans", "pour", "avec", "selon",
+    "est", "sont", "une", "des", "les", "du", "de", "par", "rapport",
+    "sur", "aux", "cas", "etude", "camion", "electrique"
+}
 
 
-# 1. Load raw text
-with open("carbone4_raw_text.txt", "r", encoding="utf-8") as f:
-    raw_text = f.read()
+def normalize_text(text):
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower()
 
 
-# 2. Parse pages using markers
-pages = re.split(r"===== PAGE (\d+) =====", raw_text)
+def keyword_chunk_indices(question, top_k=3):
+    normalized_question = normalize_text(question)
+    keywords = [
+        word for word in re.findall(r"[a-z]+", normalized_question)
+        if len(word) >= 4 and word not in STOPWORDS
+    ]
 
-documents = []
+    scored_chunks = []
+    for idx, chunk in enumerate(stored_chunks):
+        normalized_chunk = normalize_text(chunk)
+        score = sum(1 for word in keywords if word in normalized_chunk)
+        if score > 0:
+            scored_chunks.append((score, idx))
 
-# pages format: ["", "1", "text...", "2", "text...", ...]
-for i in range(1, len(pages), 2):
-    page_number = int(pages[i])
-    page_text = pages[i + 1].strip()
-
-    if page_text:
-        documents.append(
-            Document(
-                page_content=page_text,
-                metadata={"page": page_number}
-            )
-        )
-
-
-# 3. Split into chunks
-text_splitter = RecursiveCharacterTextSplitter(
-    chunk_size=1000,
-    chunk_overlap=150
-)
-
-chunks = text_splitter.split_documents(documents)
+    scored_chunks.sort(key=lambda item: (-item[0], item[1]))
+    return [idx for _, idx in scored_chunks[:top_k]]
 
 
-# Testing splitting chunks 
-# 4. Print summary
-# print(f"Total pages parsed: {len(documents)}")
-# print(f"Total chunks created: {len(chunks)}")
-
-
-# 5. Inspect first chunks
-# for i, chunk in enumerate(chunks[:5], start=1):
-#     print("\n" + "="*60)
-#     print(f"Chunk {i}")
-#     print(f"Page: {chunk.metadata['page']}")
-#     print(chunk.page_content[:300])  # preview only
-
-
-# 3. Create embeddings
-model = SentenceTransformer("all-MiniLM-L6-v2")
-chunk_texts = [chunk.page_content for chunk in chunks]
-embeddings = model.encode(chunk_texts, convert_to_numpy=True).astype("float32")
-
-
-# 4 Store in vector database
-# Initialize a FAISS index with the embedding dimension.
-index = faiss.IndexFlatL2(embeddings.shape[1])
-
-# Add all chunk vectors to the index in the same order as chunk_texts.
-index.add(embeddings)
-stored_chunks = chunk_texts
-
-
-def retrieve_chunks(question, top_k=3, distance_threshold=120.0):
-    question_embedding = model.encode([question], convert_to_numpy=True).astype("float32")
+def retrieve_chunks(question, top_k=5, distance_threshold=120.0):
+    question_embedding = model.encode([question], convert_to_numpy=True, normalize_embeddings=True).astype("float32")
     distances, indices = index.search(question_embedding, top_k)
 
-    # If the best match is too far away, treat it as out of scope.
-    if len(indices[0]) == 0 or indices[0][0] == -1 or distances[0][0] > distance_threshold:
-        return ""
+    selected_indices = []
+    for dist, idx in zip(distances[0], indices[0]):
+        if idx == -1 or dist > distance_threshold:
+            continue  # skip invalid or low-quality matches
+        if idx not in selected_indices:
+            selected_indices.append(idx)
 
-    retrieved = []
-    for idx in indices[0]:
-        if idx != -1:
-            retrieved.append(f"[Chunk {idx}]\n{stored_chunks[idx]}")
+    for idx in keyword_chunk_indices(question):
+        if idx not in selected_indices:
+            selected_indices.append(idx)
+        next_idx = idx + 1
+        if next_idx < len(stored_chunks) and next_idx not in selected_indices:
+            selected_indices.append(next_idx)
 
-    return "\n\n".join(retrieved)
+    return "\n\n".join(f"[Chunk {idx}]\n{stored_chunks[idx]}" for idx in selected_indices)
 
 # Load API key from .env file
 load_dotenv()
@@ -126,9 +104,10 @@ def generate_answer(question, retrieved_text):
     "Include citations pointing to the information in the text. "
     "CRITICAL RULES: "
     "1. NO DEDUCTION: Do not use your pre-trained world knowledge to deduce or infer answers. If the text mentions a word (like 'Paris') but does not explicitly answer the user's question about it, you cannot draw conclusions. "
-    "2. FALLBACK: If the exact answer is not explicitly written in the chunks, you MUST output EXACTLY and ONLY this phrase: "
+    "2. FALLBACK: If the answer cannot be found or assembled only from explicit facts written in the chunks, you MUST output EXACTLY and ONLY this phrase: "
     "\"Cette information n'est pas disponible dans le document.\" "
     "3. NO CHAT: Do not explain your reasoning. Do not write things like 'Puisque le document ne contient pas...' or 'La réponse est'. Just output the facts or the fallback phrase. "
+    "If you provide an answer, never append the fallback phrase after it. "
     "4. Output the final answer in French."
 )
 
@@ -160,16 +139,17 @@ def generate_answer(question, retrieved_text):
 
 
 questions = [
+    # "Quelle est l’autonomie maximale d’un camion électrique de 16 tonnes en 2022 dans le cas d’étude ?",
+    # "Quel est le coût de maintenance par kilomètre d’un camion électrique par rapport à un camion diesel, selon le modèle TCO présenté dans l’étude ?",
+    # "En combinant le dispositif de suramortissement et le bonus écologique, quel est l’écart de TCO entre un camion électrique et un camion diesel ?",
+    # "Quel est l’impact du camion électrique sur le transport longue distance, au-delà de 500 km ?",
+    # "Quels sont les trois principaux freins au déploiement du camion électrique identifiés dans l’étude, et quelles solutions sont recommandées pour chacun d’entre eux ?",
+
     "quelle est la capitale de la France ?",
-    "Quelle est l’autonomie maximale d’un camion électrique de 16 tonnes en 2022 dans le cas d’étude ?",
-    "Quel est le coût de maintenance par kilomètre d’un camion électrique par rapport à un camion diesel, selon le modèle TCO présenté dans l’étude ?",
-    "En combinant le dispositif de suramortissement et le bonus écologique, quel est l’écart de TCO entre un camion électrique et un camion diesel ?",
-    "Quel est l’impact du camion électrique sur le transport longue distance, au-delà de 500 km ?",
-    "Quels sont les trois principaux freins au déploiement du camion électrique identifiés dans l’étude, et quelles solutions sont recommandées pour chacun d’entre eux ?",
 ]
 
 
 for i, question in enumerate(questions, start=1):
     print(f"\nQ{i}: {question}")
-    context = retrieve_chunks(question, top_k=3)
+    context = retrieve_chunks(question, top_k=5)
     generate_answer(question, context)

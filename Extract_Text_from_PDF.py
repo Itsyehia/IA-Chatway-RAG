@@ -34,8 +34,10 @@ def extract_text_from_pdf(pdf_path: str, output_txt: str) -> str:
         page = doc.load_page(page_index)
         page_number = page_index + 1
 
-        # 1) Try native PDF text extraction first
-        text = page.get_text("text").strip()
+        # 1) Try native PDF text extraction first, keeping block order for tables/layout
+        blocks = page.get_text("blocks")
+        blocks.sort(key=lambda block: (block[1], block[0]))
+        text = "\n".join(block[4].strip() for block in blocks if block[4].strip()).strip()
 
         # 2) Fallback to OCR if page is image-based / nearly empty
         if len(text) < MIN_TEXT_LENGTH:

@@ -1,0 +1,10 @@
+faiss-cpu
+groq
+langchain-core
+langchain-text-splitters
+Pillow
+PyMuPDF
+pytesseract
+python-dotenv
+sentence-transformers
+streamlit
